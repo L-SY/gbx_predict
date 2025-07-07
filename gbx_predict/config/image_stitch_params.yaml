@@ -1,0 +1,34 @@
+image_stitch_node:
+  ros__parameters:
+    # Topic names
+    input_topic: "/camera/image_raw"
+    output_topic: "/stitched_image"
+    debug_topic: "/debug_image"
+    
+    # ROI parameters (ratios of image dimensions)
+    roi_x_offset_ratio: 0.1      # X offset as ratio of image width
+    roi_y_offset_ratio: 0.1      # Y offset as ratio of image height  
+    roi_width_ratio: 0.7         # ROI width as ratio of image width
+    roi_height_ratio: 0.8        # ROI height as ratio of image height
+    
+    # Stitching parameters
+    min_shift: 1                 # Minimum shift in pixels to accept
+    max_shift: 200               # Maximum shift in pixels to accept
+    max_width: 10000000          # Maximum panorama width in pixels
+    auto_reset: false            # Auto reset panorama on size mismatch
+    reset_now: false             # Reset panorama immediately (trigger)
+    stitch_along_y: true         # Stitch along Y axis (vertical) if true, X axis (horizontal) if false
+    
+    # Feature detection parameters
+    orb_features: 1000           # Number of ORB features to detect
+    match_ratio: 0.75            # Lowe's ratio test threshold
+    min_matches: 4               # Minimum number of matches required for stitching
+    
+    # Advanced parameters
+    use_histogram_equalization: true    # Apply histogram equalization to improve feature detection
+    enable_match_visualization: true    # Publish feature match visualization
+    enable_roi_visualization: true      # Publish ROI visualization
+    
+    # Performance parameters
+    processing_rate: 30.0        # Target processing rate in Hz
+    queue_size: 10               # Image queue size 
