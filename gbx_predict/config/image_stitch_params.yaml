@@ -1,7 +1,7 @@
 image_stitch_node:
   ros__parameters:
     # Topic names
-    input_topic: "/camera/image_raw"
+    input_topic: "/hk_camera/cs050/image_raw"
     output_topic: "/stitched_image"
     debug_topic: "/debug_image"
     

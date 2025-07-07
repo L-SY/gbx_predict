@@ -14,7 +14,7 @@ def generate_launch_description():
     # Declare launch arguments
     input_topic_arg = DeclareLaunchArgument(
         'input_topic',
-        default_value='/camera/image_raw',
+        default_value='/hk_camera/cs050/image_raw',
         description='Input image topic'
     )
     
@@ -50,6 +50,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('config_file'),
+            # Launch arguments will override YAML values if provided
             {
                 'input_topic': LaunchConfiguration('input_topic'),
                 'output_topic': LaunchConfiguration('output_topic'),
