@@ -87,31 +87,18 @@ def generate_launch_description():
         arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
     )
 
-    # PID velocity controller spawners
-    velocity_controller1_spawner = Node(
+    # PID velocity controller spawner (now handles both joints)
+    velocity_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["velocity_controller1", "--controller-manager", "/controller_manager"],
+        arguments=["velocity_controller", "--controller-manager", "/controller_manager"],
     )
 
-    velocity_controller2_spawner = Node(
-        package="controller_manager",
-        executable="spawner", 
-        arguments=["velocity_controller2", "--controller-manager", "/controller_manager"],
-    )
-
-    # Delay velocity controllers after joint state broadcaster
-    delay_velocity_controller1_spawner = RegisterEventHandler(
+    # Delay velocity controller after joint state broadcaster
+    delay_velocity_controller_spawner = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
-            on_exit=[velocity_controller1_spawner],
-        )
-    )
-
-    delay_velocity_controller2_spawner = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=velocity_controller1_spawner,
-            on_exit=[velocity_controller2_spawner],
+            on_exit=[velocity_controller_spawner],
         )
     )
 
@@ -120,8 +107,7 @@ def generate_launch_description():
         rviz_node,
         controller_manager_node,
         joint_state_broadcaster_spawner,
-        delay_velocity_controller1_spawner,
-        delay_velocity_controller2_spawner,
+        delay_velocity_controller_spawner,
     ]
 
     return LaunchDescription(declared_arguments + nodes) 

@@ -6,10 +6,7 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
       
-    velocity_controller1:
-      type: pid_controller/PidController
-      
-    velocity_controller2:
+    velocity_controller:
       type: pid_controller/PidController
 
 # Joint state broadcaster - publishes all joint states
@@ -23,36 +20,12 @@ joint_state_broadcaster:
       - velocity
       - effort
 
-# PID controller for velocity control on joint1 (pan axis)
-velocity_controller1:
+# PID controller for velocity control on both joints (pan and tilt axis)
+velocity_controller:
   ros__parameters:
     # 控制的关节名称
     dof_names:
       - joint1
-    
-    # 参考和状态接口类型（velocity - 速度控制）
-    reference_and_state_interfaces:
-      - velocity
-    
-    # 命令接口类型（effort - 输出力矩到硬件）
-    command_interface: effort
-    
-    # PID参数配置
-    pid:
-      p: 0.7       # 比例增益
-      i: 0.0       # 积分增益  
-      d: 0.0       # 微分增益
-      i_clamp: 5.0 # 积分限幅
-      ff_velocity_scale: 0.0  # 前馈增益
-    
-    # 使用外部测量状态（从硬件读取）
-    use_external_measured_states: false
-
-# PID controller for velocity control on joint2 (tilt axis)  
-velocity_controller2:
-  ros__parameters:
-    # 控制的关节名称
-    dof_names:
       - joint2
     
     # 参考和状态接口类型（velocity - 速度控制）
@@ -62,13 +35,23 @@ velocity_controller2:
     # 命令接口类型（effort - 输出力矩到硬件）
     command_interface: effort
     
-    # PID参数配置
-    pid:
-      p: 0.7       # 比例增益（tilt轴）
-      i: 0.0       # 积分增益
-      d: 0.0      # 微分增益
-      i_clamp: 3.0 # 积分限幅
-      ff_velocity_scale: 0.0  # 前馈增益
-    
     # 使用外部测量状态（从硬件读取）
-    use_external_measured_states: false 
+    use_external_measured_states: false
+    
+    # PID参数配置 - 每个关节单独配置
+    gains:
+      joint1:  # Pan axis (joint1)
+        p: 0.7              # 比例增益
+        i: 0.0              # 积分增益  
+        d: 0.0              # 微分增益
+        i_clamp_max: 5.0    # 积分上限
+        i_clamp_min: -5.0   # 积分下限
+        feedforward_gain: 0.0  # 前馈增益
+        
+      joint2:  # Tilt axis (joint2)
+        p: 0.7              # 比例增益
+        i: 0.0              # 积分增益
+        d: 0.0              # 微分增益
+        i_clamp_max: 3.0    # 积分上限
+        i_clamp_min: -3.0   # 积分下限
+        feedforward_gain: 0.0  # 前馈增益 
