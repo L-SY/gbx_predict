@@ -1,8 +1,8 @@
 image_stitch_node:
   ros__parameters:
     # Topic names
-    input_topic: "/hk_camera/cs050/image_raw"
-    output_topic: "/stitched_image"
+    input_topic: "/stitched_image"
+    output_topic: "/cropped_image"
     debug_topic: "/debug_image"
     
     # ROI parameters (ratios of image dimensions)

@@ -3,6 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -18,9 +19,16 @@ class ImageStitchNode(Node):
         # Initialize CV Bridge
         self.bridge = CvBridge()
         
+        # QoS configuration to match publisher
+        self.qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            depth=1
+        )
+        
         # Declare parameters with default values
-        self.declare_parameter('input_topic', '/camera/image_raw')
-        self.declare_parameter('output_topic', '/stitched_image')
+        self.declare_parameter('input_topic', '/stitched_image')
+        self.declare_parameter('output_topic', '/cropped_image')
         self.declare_parameter('debug_topic', '/debug_image')
         
         # ROI parameters
@@ -43,25 +51,45 @@ class ImageStitchNode(Node):
         self.declare_parameter('min_matches', 4)
         
         # Get initial parameter values
-        self.input_topic = str(self.get_parameter('input_topic').value)
-        self.output_topic = str(self.get_parameter('output_topic').value)
-        self.debug_topic = str(self.get_parameter('debug_topic').value)
+        input_topic_param = self.get_parameter('input_topic').value
+        output_topic_param = self.get_parameter('output_topic').value
+        debug_topic_param = self.get_parameter('debug_topic').value
         
-        self.roi_x_offset_ratio = float(self.get_parameter('roi_x_offset_ratio').value)
-        self.roi_y_offset_ratio = float(self.get_parameter('roi_y_offset_ratio').value)
-        self.roi_width_ratio = float(self.get_parameter('roi_width_ratio').value)
-        self.roi_height_ratio = float(self.get_parameter('roi_height_ratio').value)
+        self.input_topic = str(input_topic_param) if input_topic_param is not None else '/stitched_image'
+        self.output_topic = str(output_topic_param) if output_topic_param is not None else '/cropped_image'
+        self.debug_topic = str(debug_topic_param) if debug_topic_param is not None else '/debug_image'
         
-        self.min_shift = int(self.get_parameter('min_shift').value)
-        self.max_shift = int(self.get_parameter('max_shift').value)
-        self.max_width = int(self.get_parameter('max_width').value)
-        self.auto_reset = bool(self.get_parameter('auto_reset').value)
-        self.reset_now = bool(self.get_parameter('reset_now').value)
-        self.stitch_along_y = bool(self.get_parameter('stitch_along_y').value)
+        roi_x_param = self.get_parameter('roi_x_offset_ratio').value
+        roi_y_param = self.get_parameter('roi_y_offset_ratio').value
+        roi_w_param = self.get_parameter('roi_width_ratio').value
+        roi_h_param = self.get_parameter('roi_height_ratio').value
         
-        self.orb_features = int(self.get_parameter('orb_features').value)
-        self.match_ratio = float(self.get_parameter('match_ratio').value)
-        self.min_matches = int(self.get_parameter('min_matches').value)
+        self.roi_x_offset_ratio = float(roi_x_param) if roi_x_param is not None else 0.1
+        self.roi_y_offset_ratio = float(roi_y_param) if roi_y_param is not None else 0.1
+        self.roi_width_ratio = float(roi_w_param) if roi_w_param is not None else 0.7
+        self.roi_height_ratio = float(roi_h_param) if roi_h_param is not None else 0.8
+        
+        min_shift_param = self.get_parameter('min_shift').value
+        max_shift_param = self.get_parameter('max_shift').value
+        max_width_param = self.get_parameter('max_width').value
+        auto_reset_param = self.get_parameter('auto_reset').value
+        reset_now_param = self.get_parameter('reset_now').value
+        stitch_along_y_param = self.get_parameter('stitch_along_y').value
+        
+        self.min_shift = int(min_shift_param) if min_shift_param is not None else 1
+        self.max_shift = int(max_shift_param) if max_shift_param is not None else 200
+        self.max_width = int(max_width_param) if max_width_param is not None else 10000000
+        self.auto_reset = bool(auto_reset_param) if auto_reset_param is not None else False
+        self.reset_now = bool(reset_now_param) if reset_now_param is not None else False
+        self.stitch_along_y = bool(stitch_along_y_param) if stitch_along_y_param is not None else True
+        
+        orb_features_param = self.get_parameter('orb_features').value
+        match_ratio_param = self.get_parameter('match_ratio').value
+        min_matches_param = self.get_parameter('min_matches').value
+        
+        self.orb_features = int(orb_features_param) if orb_features_param is not None else 1000
+        self.match_ratio = float(match_ratio_param) if match_ratio_param is not None else 0.75
+        self.min_matches = int(min_matches_param) if min_matches_param is not None else 4
         
         # Initialize ORB detector
         self.orb_detector = cv2.ORB_create(self.orb_features)
@@ -75,14 +103,14 @@ class ImageStitchNode(Node):
         self.panorama_lock = threading.Lock()
         
         # Create publishers
-        self.stitched_pub = self.create_publisher(Image, self.output_topic, 10)
-        self.debug_pub = self.create_publisher(Image, self.debug_topic, 10)
-        self.debug_roi_pub = self.create_publisher(Image, f"{self.debug_topic}/roi", 10)
-        self.debug_matches_pub = self.create_publisher(Image, f"{self.debug_topic}/matches", 10)
+        self.stitched_pub = self.create_publisher(Image, self.output_topic, self.qos_profile)
+        self.debug_pub = self.create_publisher(Image, self.debug_topic, self.qos_profile)
+        self.debug_roi_pub = self.create_publisher(Image, f"{self.debug_topic}/roi", self.qos_profile)
+        self.debug_matches_pub = self.create_publisher(Image, f"{self.debug_topic}/matches", self.qos_profile)
         
-        # Create subscriber
+        # Create subscriber with matching QoS
         self.image_sub = self.create_subscription(
-            Image, self.input_topic, self.image_callback, 10)
+            Image, self.input_topic, self.image_callback, self.qos_profile)
         
         self.get_logger().info(f"ImageStitchNode initialized")
         self.get_logger().info(f"Subscribing to: {self.input_topic}")
@@ -286,8 +314,10 @@ class ImageStitchNode(Node):
             return None
         
         # Extract matched points
-        pts1 = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-        pts2 = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+        pts1_list = [kp1[m.queryIdx].pt for m in matches]
+        pts2_list = [kp2[m.trainIdx].pt for m in matches]
+        pts1 = np.float32(pts1_list).reshape(-1, 1, 2)
+        pts2 = np.float32(pts2_list).reshape(-1, 1, 2)
         
         # Estimate affine transform using RANSAC
         try:
@@ -316,6 +346,9 @@ class ImageStitchNode(Node):
     
     def perform_stitching(self, current_roi, shift):
         """Perform the actual stitching operation"""
+        if self.panorama is None:
+            return
+            
         add_len = abs(shift)
         if add_len == 0:
             return

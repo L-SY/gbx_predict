@@ -14,13 +14,13 @@ def generate_launch_description():
     # Declare launch arguments
     input_topic_arg = DeclareLaunchArgument(
         'input_topic',
-        default_value='/hk_camera/cs050/image_raw',
+        default_value='/stitched_image',
         description='Input image topic'
     )
     
     output_topic_arg = DeclareLaunchArgument(
         'output_topic',
-        default_value='/stitched_image',
+        default_value='/cropped_image',
         description='Output stitched image topic'
     )
     
