@@ -9,6 +9,7 @@ import sys
 import select
 import termios
 import tty
+import yaml
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
@@ -34,6 +35,9 @@ class DualCameraCalibration(Node):
         # 保存目录
         self.SAVE_DIR = "calibration_images"
         os.makedirs(self.SAVE_DIR, exist_ok=True)
+        # 标定结果目录（npy和yaml）
+        self.RESULT_DIR = "calibration_files"
+        os.makedirs(self.RESULT_DIR, exist_ok=True)
 
         # QoS配置
         qos_profile = QoSProfile(
@@ -61,6 +65,7 @@ class DualCameraCalibration(Node):
         # 多张变换矩阵列表及平均矩阵
         self.Hs = []
         self.H_avg = None
+        self.active = True  # 标志节点是否活跃
 
         # Terminal 设置，用于捕获键盘输入
         self.old_term = termios.tcgetattr(sys.stdin)
@@ -72,7 +77,7 @@ class DualCameraCalibration(Node):
         self.sync = ApproximateTimeSynchronizer([self.left_sub, self.right_sub], queue_size=10, slop=0.1)
         self.sync.registerCallback(self.callback)
 
-        self.get_logger().info("[INFO] 双相机标定启动: 终端键入 'c' 保存并更新 H, 'q' 退出并生成 npy")
+        self.get_logger().info("[INFO] 双相机标定启动: 终端键入 'c' 保存并更新 H, 'q' 退出并生成 npy 和 yaml")
 
         # 启动键盘监听线程
         self.keyboard_thread = threading.Thread(target=self.keyboard_listener, daemon=True)
@@ -83,6 +88,54 @@ class DualCameraCalibration(Node):
 
     def restore_term(self):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_term)
+
+    def convert_npy_to_yaml(self, npy_path, yaml_path=None):
+        """
+        Convert .npy homography matrix file to YAML format
+        
+        Args:
+            npy_path: Path to .npy file
+            yaml_path: Output YAML path (optional, defaults to same name with .yaml extension)
+        """
+        if not os.path.exists(npy_path):
+            self.get_logger().error(f"Error: {npy_path} does not exist")
+            return False
+        
+        try:
+            # Load numpy array
+            H = np.load(npy_path)
+            self.get_logger().info(f"Loaded homography matrix from {npy_path}")
+            self.get_logger().info(f"Matrix shape: {H.shape}")
+            self.get_logger().info(f"Matrix:\n{H}")
+            
+            # Validate matrix
+            if H.shape != (3, 3):
+                self.get_logger().error(f"Error: Expected 3x3 matrix, got {H.shape}")
+                return False
+            
+            # Determine output path
+            if yaml_path is None:
+                yaml_path = npy_path.replace('.npy', '.yaml')
+            
+            # Write YAML file with OpenCV format
+            with open(yaml_path, 'w') as f:
+                f.write("%YAML:1.0\n")
+                f.write("---\n")
+                f.write("homography: !!opencv-matrix\n")
+                f.write("   rows: 3\n")
+                f.write("   cols: 3\n")
+                f.write("   dt: d\n")
+                f.write("   data: [ ")
+                data_str = ", ".join([f"{x:.16e}" for x in H.flatten()])
+                f.write(data_str)
+                f.write(" ]\n")
+            
+            self.get_logger().info(f"Successfully converted to {yaml_path}")
+            return True
+            
+        except Exception as e:
+            self.get_logger().error(f"Error during conversion: {e}")
+            return False
 
     # 边缘模糊 + 简单二值化预处理：CLAHE -> 双边滤波 -> 全局阈值
     def preprocess(self, gray):
@@ -130,6 +183,8 @@ class DualCameraCalibration(Node):
 
     # 同步回调：预处理后检测，发布角点、二值图和基于 H_avg 发布 debug 图
     def callback(self, img_left_msg, img_right_msg):
+        if not self.active:
+            return
         self.img_left = self.bridge.imgmsg_to_cv2(img_left_msg, "bgr8")
         self.img_right = self.bridge.imgmsg_to_cv2(img_right_msg, "bgr8")
 
@@ -172,8 +227,17 @@ class DualCameraCalibration(Node):
 
             elif c == 'q':
                 if self.H_avg is not None:
-                    np.save(os.path.join(self.SAVE_DIR, "H_right_to_left.npy"), self.H_avg)
-                    self.get_logger().info(f"[DONE] 平均单应矩阵保存为 {self.SAVE_DIR}/H_right_to_left.npy")
+                    npy_path = os.path.join(self.RESULT_DIR, "H_right_to_left.npy")
+                    yaml_path = os.path.join(self.RESULT_DIR, "H_right_to_left.yaml")
+                    # 保存 .npy 文件
+                    np.save(npy_path, self.H_avg)
+                    self.get_logger().info(f"[DONE] 平均单应矩阵保存为 {npy_path}")
+                    # 自动转换为 .yaml 文件
+                    if self.convert_npy_to_yaml(npy_path, yaml_path):
+                        self.get_logger().info(f"[CONVERT] 成功转换为 YAML 格式: {yaml_path}")
+                    else:
+                        self.get_logger().error("[CONVERT] YAML 转换失败")
+                self.active = False  # 先设置为False，防止publish
                 self.get_logger().info("用户退出，标定完成")
                 rclpy.shutdown()
 
@@ -203,7 +267,9 @@ def main(args=None):
     finally:
         if 'node' in locals():
             node.destroy_node()
-        rclpy.shutdown()
+        # 只在 rclpy 还没 shutdown 时调用
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
