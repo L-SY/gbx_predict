@@ -473,7 +473,7 @@ if __name__ == "__main__":
     image_cropping(
         image_path=input_image_path,
         output_folder=output_directory,
-        actual_width_cm=10,         # 图片实际宽度10厘米
+        actual_width_cm=5,         # 图片实际宽度10厘米
         crop_size_cm=5,             # 每个区域5x5厘米
         start_from_left=False,      # True: 从左开始, False: 从右开始
         add_border=True,            # 是否添加内边框
